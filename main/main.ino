@@ -96,10 +96,15 @@ int INTERVALO_COLETA = 1;
 //Variavel que controla a cada quantos registros a informação deve ser enviada pela serial
 int INTERVALO_TRANSMISSAO = 1;
 //Caso debug ativo, faz com que o intervalo de transmissão seja de segundos e não de minutos (para facilitar o teste)
-boolean DEBUG = false;
-boolean ATLAS_ENV20 = false;
-boolean ATLAS_ENV50 = true;
-boolean TRANSMIT_LORA = true;
+boolean DEBUG = true;
+//boolean ATLAS_ENV20 = false;
+//boolean ATLAS_ENV50 = true;
+//boolean TRANSMIT_LORA = true;
+
+//#define USE_ADC
+//#define ATLAS_ENV20
+#define ATLAS_ENV50
+//#define SEND_LORA
 
 //LORA
 #include <lmic.h>
@@ -148,7 +153,9 @@ const lmic_pinmap lmic_pins = {
 void setup() {
   Wire.setPins(I2C_SDA, I2C_SCL);
   Wire.begin();   
-  SPI.begin(VSPI_SCLK, VSPI_MISO, VSPI_MOSI, VSPI_SS);
+
+
+
   Serial.begin(115200);  
 
   //Inicializa GPS
@@ -488,13 +495,16 @@ time_t syncProvider() {
 
 //------------------------------------- BLOCO SENSORES -------------------------------------------
 void initSensors() {
-  if (ATLAS_ENV20) {
-    initENV20_pH();
-    initENV20_ORP();
-    initENV20_OD();
-  }
-  if (ATLAS_ENV50) {
-  }
+
+
+#ifdef ATLAS_ENV20
+  initENV20_pH();
+  initENV20_ORP();
+  initENV20_OD();
+#endif
+#ifdef ATLAS_ENV50
+
+#endif
 }
 
 
@@ -502,52 +512,36 @@ String getSensorsValues() {
   String dataString = "";
   float pH, DO, ORP, temp;
 
-  if (ATLAS_ENV20) {
-    pH = readENV20_pH();
-    ORP = readENV20_ORP();
-    DO = readENV20_OD();
-    temp = 0.0;
+#ifdef ATLAS_ENV20
+  pH = readENV20_pH();
+  ORP = readENV20_ORP();
+  DO = readENV20_OD();
+  temp = 0.0;
+#endif
+#ifdef ATLAS_ENV50
+  pH = readPH_ENV50_i2c();
+  //ORP = readORP_ENV50_i2c();
+  //DO = readDO_ENV50_i2c();
+  //temp = readTEMP_ENV50_i2c();
+#endif
 
-    dataString += "ph=";
-    dataString += pH;
-    dataString += ";";
-    dataString += "orp=";
-    dataString += ORP;
-    dataString += ";";
-    dataString += "od=";
-    dataString += DO;
-    dataString += ";";
+  dataString += "ph=";
+  dataString += pH;
+  dataString += ";";
+  dataString += "orp=";
+  dataString += ORP;
+  dataString += ";";
+  dataString += "od=";
+  dataString += DO;
+  dataString += ";";
+  dataString += "temp=";
+  dataString += temp;
+  dataString += ";";
 
-    if (TRANSMIT_LORA) {
-      sendToLORA(pH, ORP, DO, temp);
-    }
-  }
-
-  if (ATLAS_ENV50) {
-    pH = readPH_ENV50_i2c();
-    ORP = readORP_ENV50_i2c();
-    DO = readDO_ENV50_i2c();
-    temp = readTEMP_ENV50_i2c();
-
-    dataString += "ph=";
-    dataString += pH;
-    dataString += ";";
-    dataString += "orp=";
-    dataString += ORP;
-    dataString += ";";
-    dataString += "od=";
-    dataString += DO;
-    dataString += ";";
-    dataString += "temp=";
-    dataString += temp;
-    dataString += ";";
-
-    if (TRANSMIT_LORA) {
-      sendToLORA(pH, ORP, DO, temp);
-    }
-  }
-
-
+#ifdef SEND_LORA
+  sendToLORA(pH, ORP, DO, temp);
+#endif
+  
   return dataString;
 }
 //------------------------------------- BLOCO ATLAS ENV20 -------------------------------------------
@@ -788,6 +782,7 @@ void sendToLORA(float pH, float ORP, float DO, float temp) {
 
 void initLORA() {
   
+  SPI.begin(VSPI_SCLK, VSPI_MISO, VSPI_MOSI, VSPI_SS);
   
   LMIC_selectSubBand(1);
   LMIC_setLinkCheckMode(0);
