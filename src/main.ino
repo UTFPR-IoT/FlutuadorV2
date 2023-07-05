@@ -24,6 +24,12 @@ static const int VSPI_SCLK = 40;
 static const int VSPI_SS = 39;
 static const int VSPI_SS2 = 38;
 
+static const int RFM_RESET = 37;
+static const int RFM_DIO0 = 7;
+static const int RFM_DIO1 = 6;
+static const int RFM_DIO2 = 5;
+
+
 //Pinos I2C (Conversor 4-20mA para 5v e conector I2C para sensores)
 static const int I2C_SCL = 14;
 static const int I2C_SDA = 21;
@@ -46,6 +52,10 @@ MCP3208 adc;
 static const uint32_t GPSBaud = 9600;
 TinyGPSPlus gps;
 SoftwareSerial gpsSerial(RXPin, TXPin);
+
+//Variáveis SD
+SPIClass mySPI = SPIClass(HSPI);
+
 
 //----------- Bloco Atlas ENV20-----------
 #include "ph_grav.h"
@@ -71,6 +81,8 @@ Ezo_board ENV50_TEMP = Ezo_board(98, "TEMP");
 Ezo_board ENV50_DO = Ezo_board(97, "DO");
 
 //----------- Bloco de controle -----------
+//#define USE_ADC
+
 boolean failSD = false;
 boolean hasError = false;
 boolean alarmed = false;
@@ -124,16 +136,19 @@ static uint16_t mydata = 0; // Variável do contador
 static osjob_t sendjob;
 bool flag = false; // Flag para debounce
 const unsigned TX_INTERVAL = 60;
+
+// Pin mapping
 const lmic_pinmap lmic_pins = {
-    .nss = 25,
+    .nss = VSPI_SS,
     .rxtx = LMIC_UNUSED_PIN,
-    .rst = 26, 
-    .dio = {27, 14, 13}
+    .rst = RFM_RESET,
+    .dio = {RFM_DIO0, RFM_DIO1, LMIC_UNUSED_PIN},
 };
 
 void setup() {
   Wire.setPins(I2C_SDA, I2C_SCL);
   Wire.begin();   
+  SPI.begin(VSPI_SCLK, VSPI_MISO, VSPI_MOSI, VSPI_SS);
   Serial.begin(115200);  
 
   //Inicializa GPS
@@ -142,8 +157,11 @@ void setup() {
   //Inicializa o SD
   initSD();
 
+
+  #ifdef USE_ADC
   //Inicializa o ADC
   initADC();
+  #endif
 
   //Inicializa os Sensores
   initSensors();
@@ -273,7 +291,8 @@ void fileLoop() {
 
 //------------------------------------- BLOCO SD -------------------------------------------
 void initSD() {
-  if (!SD.begin()) {
+  mySPI.begin(SD_SCK, SD_MISO, SD_MOSI);
+  if(!SD.begin(SD_CS, mySPI, 10000000)){
     Serial.println("Erro ao inicializar o cartão SD");
     failSD = true;
     hasError = true;
@@ -768,6 +787,8 @@ void sendToLORA(float pH, float ORP, float DO, float temp) {
 }
 
 void initLORA() {
+  
+  
   LMIC_selectSubBand(1);
   LMIC_setLinkCheckMode(0);
   // LMIC init
